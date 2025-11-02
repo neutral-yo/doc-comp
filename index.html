@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Local Doc Diff — Client-Only Comparison Tool</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f172a;
+      --card-bg: rgba(15, 23, 42, 0.75);
+      --card-bg-light: rgba(255, 255, 255, 0.85);
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #facc15;
+      --text: #0f172a;
+      --text-inverse: #f8fafc;
+      --border: rgba(148, 163, 184, 0.35);
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 20% 20%, #1d4ed8 0%, #0f172a 45%, #020617 100%);
+      color: var(--text-inverse);
+      display: flex;
+      justify-content: center;
+      padding: 32px 16px 48px;
+      box-sizing: border-box;
+    }
+
+    .app {
+      width: min(1100px, 100%);
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(18px);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      border-radius: 20px;
+      padding: 32px clamp(16px, 4vw, 42px);
+      box-sizing: border-box;
+      box-shadow: 0 40px 80px -40px rgba(15, 23, 42, 0.8);
+    }
+
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(1.9rem, 3vw, 2.4rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    header p {
+      margin: 0;
+      max-width: 720px;
+      font-size: clamp(1rem, 1.8vw, 1.08rem);
+      color: rgba(226, 232, 240, 0.82);
+      line-height: 1.55;
+    }
+
+    .upload-grid {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+
+    .dropzone {
+      position: relative;
+      border: 2px dashed rgba(148, 163, 184, 0.4);
+      border-radius: 16px;
+      padding: 28px;
+      background: rgba(15, 23, 42, 0.55);
+      transition: border-color 0.25s ease, transform 0.25s ease, background 0.25s ease;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 180px;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .dropzone.dragging {
+      border-color: rgba(99, 102, 241, 0.9);
+      background: rgba(99, 102, 241, 0.12);
+      transform: translateY(-2px);
+    }
+
+    .dropzone input[type="file"] {
+      display: none;
+    }
+
+    .dropzone h3 {
+      margin: 0;
+      font-size: 1.08rem;
+      font-weight: 600;
+    }
+
+    .dropzone p {
+      margin: 0;
+      color: rgba(203, 213, 225, 0.85);
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+
+    .dropzone .file-pill {
+      display: inline-flex;
+      align-self: center;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(99, 102, 241, 0.18);
+      color: rgba(224, 231, 255, 0.95);
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    .dropzone .hint {
+      font-size: 0.8rem;
+      color: rgba(148, 163, 184, 0.8);
+    }
+
+    .compare-controls {
+      margin-top: 32px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .compare-controls label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.9rem;
+      color: rgba(224, 231, 255, 0.85);
+    }
+
+    select,
+    button,
+    .toggle {
+      border-radius: 999px;
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      background: rgba(30, 41, 59, 0.6);
+      color: #e2e8f0;
+      padding: 10px 18px;
+      font: inherit;
+      outline: none;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+      cursor: pointer;
+    }
+
+    select {
+      cursor: pointer;
+      min-width: 180px;
+    }
+
+    select:focus,
+    select:hover {
+      border-color: rgba(129, 140, 248, 0.8);
+      background: rgba(79, 70, 229, 0.2);
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(2, 6, 23, 0.4);
+      border-color: rgba(99, 102, 241, 0.25);
+      padding: 8px 16px;
+    }
+
+    .toggle input {
+      accent-color: var(--primary);
+      width: 18px;
+      height: 18px;
+    }
+
+    button {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.85), rgba(79, 70, 229, 0.9));
+      border: none;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      padding: 11px 22px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 18px 30px -18px rgba(99, 102, 241, 0.9);
+    }
+
+    button.secondary {
+      background: rgba(15, 23, 42, 0.45);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      box-shadow: none;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      box-shadow: none;
+      filter: grayscale(0.3);
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 24px 40px -25px rgba(99, 102, 241, 0.95);
+    }
+
+    .stats {
+      margin-top: 36px;
+      background: rgba(15, 23, 42, 0.65);
+      border-radius: 18px;
+      padding: 24px clamp(16px, 3vw, 28px);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+    }
+
+    .stats h2 {
+      margin: 0 0 20px 0;
+      font-size: 1.3rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: rgba(2, 6, 23, 0.55);
+      border: 1px solid rgba(99, 102, 241, 0.18);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .stat-card h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: rgba(224, 231, 255, 0.92);
+    }
+
+    .stat-card .meta {
+      font-size: 0.86rem;
+      color: rgba(148, 163, 184, 0.85);
+    }
+
+    .stat-card .metric {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.92rem;
+      color: rgba(226, 232, 240, 0.9);
+    }
+
+    .results {
+      margin-top: 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .results h2 {
+      margin: 0;
+      font-size: 1.3rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .legend {
+      display: inline-flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 0.88rem;
+      color: rgba(203, 213, 225, 0.9);
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend .swatch {
+      width: 18px;
+      height: 18px;
+      border-radius: 5px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+
+    .swatch.add {
+      background: rgba(34, 197, 94, 0.2);
+      border-color: rgba(34, 197, 94, 0.5);
+    }
+
+    .swatch.del {
+      background: rgba(248, 113, 113, 0.22);
+      border-color: rgba(248, 113, 113, 0.55);
+    }
+
+    .swatch.eq {
+      background: rgba(79, 70, 229, 0.14);
+      border-color: rgba(79, 70, 229, 0.4);
+    }
+
+    .diff-output {
+      background: rgba(2, 6, 23, 0.6);
+      border-radius: 18px;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      padding: clamp(16px, 3vw, 24px);
+      min-height: 220px;
+      font-size: 1rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .diff-output .diff-add {
+      background: rgba(34, 197, 94, 0.16);
+      color: rgba(74, 222, 128, 0.95);
+      padding: 2px 0;
+      border-bottom: 1px solid rgba(34, 197, 94, 0.4);
+    }
+
+    .diff-output .diff-del {
+      background: rgba(248, 113, 113, 0.16);
+      color: rgba(252, 165, 165, 0.95);
+      padding: 2px 0;
+      border-bottom: 1px solid rgba(248, 113, 113, 0.45);
+      text-decoration: line-through;
+    }
+
+    .diff-output .diff-eq {
+      color: rgba(226, 232, 240, 0.96);
+    }
+
+    .diff-output .segment {
+      display: inline;
+    }
+
+    details {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 14px;
+      border: 1px solid rgba(99, 102, 241, 0.18);
+      padding: 16px 20px;
+    }
+
+    details summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: rgba(224, 231, 255, 0.92);
+    }
+
+    details[open] summary {
+      margin-bottom: 16px;
+    }
+
+    .source-grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+
+    .source-card {
+      background: rgba(2, 6, 23, 0.5);
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .source-card h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .source-card pre {
+      margin: 0;
+      max-height: 280px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      background: rgba(15, 23, 42, 0.45);
+      border-radius: 10px;
+      padding: 10px 12px;
+      border: 1px solid rgba(99, 102, 241, 0.12);
+    }
+
+    footer {
+      margin-top: 40px;
+      font-size: 0.85rem;
+      color: rgba(148, 163, 184, 0.8);
+      line-height: 1.5;
+    }
+
+    footer a {
+      color: rgba(129, 140, 248, 0.85);
+    }
+
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(2, 6, 23, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 999;
+      gap: 16px;
+    }
+
+    .spinner {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      border: 5px solid rgba(99, 102, 241, 0.2);
+      border-top-color: rgba(129, 140, 248, 0.95);
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .backdrop p {
+      margin: 0;
+      font-size: 1rem;
+      color: rgba(224, 231, 255, 0.9);
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 28px;
+      transform: translateX(-50%) translateY(120%);
+      padding: 12px 20px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.92);
+      color: rgba(226, 232, 240, 0.96);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      box-shadow: 0 20px 40px -20px rgba(15, 23, 42, 0.8);
+      transition: transform 0.35s ease, opacity 0.35s ease;
+      opacity: 0;
+      z-index: 998;
+      font-size: 0.92rem;
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    .toast.success {
+      border-color: rgba(34, 197, 94, 0.55);
+    }
+
+    .toast.error {
+      border-color: rgba(248, 113, 113, 0.65);
+    }
+
+    .toast.warning {
+      border-color: rgba(250, 204, 21, 0.65);
+    }
+
+    .info-banner {
+      margin-top: 24px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: rgba(59, 130, 246, 0.16);
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      border-radius: 14px;
+      padding: 16px 18px;
+      font-size: 0.92rem;
+      color: rgba(191, 219, 254, 0.95);
+    }
+
+    .info-banner strong {
+      font-weight: 600;
+      color: rgba(191, 219, 254, 0.98);
+    }
+
+    .no-diff {
+      text-align: center;
+      margin: 40px 0;
+      color: rgba(148, 163, 184, 0.95);
+      font-weight: 500;
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 24px 12px 40px;
+      }
+
+      .app {
+        padding: 24px 16px 32px;
+      }
+
+      .compare-controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      select,
+      button,
+      .toggle {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .dropzone {
+        min-height: 160px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Local Doc Diff</h1>
+      <p>
+        Compare two Word <code>.docx</code> (or plain text) documents entirely in your browser.
+        No files are uploaded — all parsing, diffing, and reporting happens on your device.
+      </p>
+    </header>
+
+    <main>
+      <section class="upload-grid">
+        <div class="dropzone" data-key="fileA" tabindex="0" role="button" aria-label="Upload the original document">
+          <input type="file" accept=".docx,.txt,.md" />
+          <h3>Original document</h3>
+          <p>Drag &amp; drop or click to choose a file</p>
+          <div class="file-pill file-name" aria-live="polite">No file selected</div>
+          <div class="hint">Supported: DOCX · TXT · MD</div>
+        </div>
+        <div class="dropzone" data-key="fileB" tabindex="0" role="button" aria-label="Upload the revised document">
+          <input type="file" accept=".docx,.txt,.md" />
+          <h3>Revised document</h3>
+          <p>Drag &amp; drop or click to choose a file</p>
+          <div class="file-pill file-name" aria-live="polite">No file selected</div>
+          <div class="hint">Supported: DOCX · TXT · MD</div>
+        </div>
+      </section>
+
+      <section class="compare-controls" aria-label="Comparison controls">
+        <label>
+          Diff strategy
+          <select id="comparisonMode">
+            <option value="semantic">Balanced (word &amp; semantic aware)</option>
+            <option value="line">Paragraph-aware (line-first)</option>
+          </select>
+        </label>
+
+        <label class="toggle" for="normalizeWhitespace">
+          <input type="checkbox" id="normalizeWhitespace" />
+          Normalize whitespace
+        </label>
+
+        <button id="compareBtn" disabled>
+          🔍 Compare documents
+        </button>
+
+        <button id="downloadBtn" class="secondary" disabled>
+          ⬇️ Download Excel summary
+        </button>
+      </section>
+
+      <div class="info-banner">
+        <strong>Tip:</strong> For large documents, keep this tab active during processing.
+        Complex formatting is simplified to text for comparison.
+      </div>
+
+      <section id="statsSection" class="stats" hidden>
+        <h2>Summary</h2>
+        <div class="stat-grid" id="statsGrid"></div>
+      </section>
+
+      <section id="resultsSection" class="results" hidden>
+        <div class="results-header">
+          <h2>Visual diff</h2>
+          <div class="legend" aria-hidden="true">
+            <span><span class="swatch add"></span>Added</span>
+            <span><span class="swatch del"></span>Removed</span>
+            <span><span class="swatch eq"></span>Unchanged</span>
+          </div>
+        </div>
+        <div id="diffOutput" class="diff-output" aria-live="polite"></div>
+
+        <details>
+          <summary>Show source text snapshots</summary>
+          <div class="source-grid">
+            <div class="source-card">
+              <h3 id="sourceATitle">Original document</h3>
+              <pre id="docAText" aria-label="Original document text preview"></pre>
+            </div>
+            <div class="source-card">
+              <h3 id="sourceBTitle">Revised document</h3>
+              <pre id="docBText" aria-label="Revised document text preview"></pre>
+            </div>
+          </div>
+        </details>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        Built with open-source libraries (<a href="https://github.com/mwilliamson/mammoth.js" target="_blank" rel="noopener">mammoth.js</a>,
+        <a href="https://github.com/google/diff-match-patch" target="_blank" rel="noopener">diff-match-patch</a>,
+        <a href="https://sheetjs.com/" target="_blank" rel="noopener">SheetJS</a>). You can extend this UI with additional client-side workflows or
+        connect it to a backend later if collaboration or storage becomes necessary.
+      </p>
+    </footer>
+  </div>
+
+  <div id="loadingBackdrop" class="backdrop" hidden aria-hidden="true">
+    <div class="spinner" role="status" aria-label="Processing"></div>
+    <p>Processing documents…</p>
+  </div>
+
+  <div id="statusToast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.16/mammoth.browser.min.js" integrity="sha512-8VmE6xPD58Ll35HbcgEJel0L5IUBxQ6ZXLn9vHsHeeJ5T8bJDdyHIjzwcdQXZJbDKQxiTi9+AQiA7lDjFQ+Anw==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.min.js" integrity="sha512-kY3Z1jCT3VkOITkkpFmS6r30YIOCwRvDDDeWGPAHDq6cH+xr3aMcMBXNIN1qNbfXDnpa9eKJeNEgnbPiwxup9w==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.19.3/xlsx.full.min.js" integrity="sha512-zetFVUTt67GX+RGpc0908USDHqvIDmlmfbkL6AIUdqvMhxvhgLaV+wCS3+MuzXs9pXYJ0NR44ZlT4bhkMjhC2g==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+
+  <script>
+    'use strict';
+
+    const state = {
+      fileA: null,
+      fileB: null,
+      textA: '',
+      textB: '',
+      diffs: [],
+      summary: null,
+      summaryRows: [],
+    };
+
+    let toastTimeout;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const dropzones = document.querySelectorAll('.dropzone');
+      dropzones.forEach(zone => bindDropzone(zone));
+
+      const compareBtn = document.getElementById('compareBtn');
+      compareBtn.addEventListener('click', performComparison);
+
+      const downloadBtn = document.getElementById('downloadBtn');
+      downloadBtn.addEventListener('click', handleDownload);
+
+      document.getElementById('normalizeWhitespace').addEventListener('change', () => {
+        if (state.diffs.length) {
+          showStatus('Whitespace normalization changed. Re-run comparison for updated results.', 'warning');
+        }
+      });
+    });
+
+    function bindDropzone(zone) {
+      const fileInput = zone.querySelector('input[type="file"]');
+      const key = zone.dataset.key;
+
+      const openFileDialog = () => fileInput.click();
+
+      zone.addEventListener('click', openFileDialog);
+      zone.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openFileDialog();
+        }
+      });
+
+      ['dragenter', 'dragover'].forEach(evt =>
+        zone.addEventListener(evt, (event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          zone.classList.add('dragging');
+        })
+      );
+
+      ['dragleave', 'drop'].forEach(evt =>
+        zone.addEventListener(evt, () => zone.classList.remove('dragging'))
+      );
+
+      zone.addEventListener('drop', (event) => {
+        event.preventDefault();
+        if (event.dataTransfer.files && event.dataTransfer.files.length) {
+          handleFiles(event.dataTransfer.files, key, zone);
+        }
+      });
+
+      fileInput.addEventListener('change', (event) => {
+        if (event.target.files && event.target.files.length) {
+          handleFiles(event.target.files, key, zone);
+        }
+      });
+    }
+
+    function handleFiles(fileList, key, zone) {
+      const file = fileList[0];
+      if (!file) return;
+
+      if (!isSupportedFile(file)) {
+        showStatus('Unsupported file type. Use DOCX, TXT, or MD formats.', 'error');
+        return;
+      }
+
+      state[key] = file;
+      updateDropzoneLabel(zone, file);
+      refreshActionStates();
+      showStatus(`${file.name} ready for comparison.`, 'success');
+    }
+
+    function updateDropzoneLabel(zone, file) {
+      const label = zone.querySelector('.file-name');
+      label.textContent = `${file.name} · ${formatBytes(file.size)}`;
+    }
+
+    function formatBytes(bytes) {
+      const units = ['B', 'KB', 'MB', 'GB'];
+      if (bytes === 0) return '0 B';
+      const exp = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      return `${(bytes / Math.pow(1024, exp)).toFixed(exp ? 1 : 0)} ${units[exp]}`;
+    }
+
+    function isSupportedFile(file) {
+      const ext = inferExtension(file.name);
+      return ['docx', 'txt', 'md'].includes(ext);
+    }
+
+    function inferExtension(filename) {
+      const parts = filename.toLowerCase().split('.');
+      return parts.length > 1 ? parts.pop() : '';
+    }
+
+    async function extractText(file) {
+      const ext = inferExtension(file.name);
+      if (ext === 'docx') {
+        return await extractDocxText(file);
+      }
+      return await file.text();
+    }
+
+    async function extractDocxText(file) {
+      if (!window.mammoth) {
+        throw new Error('mammoth.js failed to load.');
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const { value } = await window.mammoth.extractRawText({ arrayBuffer });
+      return value || '';
+    }
+
+    function refreshActionStates() {
+      const compareBtn = document.getElementById('compareBtn');
+      compareBtn.disabled = !(state.fileA && state.fileB);
+
+      const downloadBtn = document.getElementById('downloadBtn');
+      const hasChanges = state.diffs.some(diff => diff[0] !== 0);
+      downloadBtn.disabled = !hasChanges;
+    }
+
+    async function performComparison() {
+      if (!state.fileA || !state.fileB) {
+        showStatus('Please select both documents before comparing.', 'warning');
+        return;
+      }
+
+      toggleLoading(true);
+
+      try {
+        const [rawTextA, rawTextB] = await Promise.all([
+          extractText(state.fileA),
+          extractText(state.fileB),
+        ]);
+
+        state.textA = prepareText(rawTextA);
+        state.textB = prepareText(rawTextB);
+
+        const mode = document.getElementById('comparisonMode').value;
+        const diffs = runDiff(state.textA, state.textB, mode);
+        state.diffs = diffs;
+
+        computeSummary();
+        renderStats();
+        renderDiff();
+        renderDocuments();
+
+        document.getElementById('statsSection').hidden = false;
+        document.getElementById('resultsSection').hidden = false;
+
+        showStatus('Comparison complete.', 'success');
+      } catch (error) {
+        console.error(error);
+        showStatus(error.message || 'An unexpected error occurred during comparison.', 'error');
+      } finally {
+        toggleLoading(false);
+        refreshActionStates();
+      }
+    }
+
+    function prepareText(text) {
+      if (!text) return '';
+      let prepared = text.replace(/\r\n/g, '\n');
+      const normalize = document.getElementById('normalizeWhitespace').checked;
+      if (normalize) {
+        prepared = prepared.replace(/[ \t]+/g, ' ');
+        prepared = prepared.replace(/\n{3,}/g, '\n\n');
+      }
+      return prepared.trim();
+    }
+
+    function runDiff(textA, textB, mode) {
+      if (!window.diff_match_patch) {
+        throw new Error('diff-match-patch library is unavailable.');
+      }
+      const dmp = new diff_match_patch();
+      dmp.Diff_Timeout = 4;
+
+      const checkLines = mode === 'line';
+      const diffs = dmp.diff_main(textA, textB, checkLines);
+      dmp.diff_cleanupSemantic(diffs);
+      dmp.diff_cleanupEfficiency(diffs);
+
+      return diffs;
+    }
+
+    function computeSummary() {
+      const diffs = state.diffs;
+      const summary = {
+        insertions: { segments: 0, chars: 0, words: 0 },
+        deletions: { segments: 0, chars: 0, words: 0 },
+        replacements: 0,
+        totalChanges: 0,
+        wordsA: countWords(state.textA),
+        wordsB: countWords(state.textB),
+        charsA: state.textA.length,
+        charsB: state.textB.length,
+      };
+
+      const rows = [];
+      let replacements = 0;
+
+      for (let i = 0; i < diffs.length; i++) {
+        const [op, text] = diffs[i];
+        const trimmed = text.trim();
+        const words = countWords(text);
+        const chars = text.length;
+
+        if (op === 1) {
+          summary.insertions.segments += trimmed ? 1 : 0;
+          summary.insertions.words += words;
+          summary.insertions.chars += chars;
+          summary.totalChanges += trimmed ? 1 : 0;
+
+          rows.push({
+            type: 'Addition',
+            content: trimmed || '(whitespace)',
+            words,
+            chars,
+            before: i > 0 ? truncate(diffs[i - 1][1]) : '',
+            after: i < diffs.length - 1 ? truncate(diffs[i + 1][1]) : '',
+          });
+        } else if (op === -1) {
+          summary.deletions.segments += trimmed ? 1 : 0;
+          summary.deletions.words += words;
+          summary.deletions.chars += chars;
+          summary.totalChanges += trimmed ? 1 : 0;
+
+          rows.push({
+            type: 'Deletion',
+            content: trimmed || '(whitespace)',
+            words,
+            chars,
+            before: i > 0 ? truncate(diffs[i - 1][1]) : '',
+            after: i < diffs.length - 1 ? truncate(diffs[i + 1][1]) : '',
+          });
+
+          if (i < diffs.length - 1 && diffs[i + 1][0] === 1) {
+            replacements++;
+          }
+        }
+      }
+
+      summary.replacements = replacements;
+      state.summary = summary;
+      state.summaryRows = rows;
+    }
+
+    function countWords(text) {
+      if (!text) return 0;
+      const tokens = text.trim().split(/\s+/).filter(Boolean);
+      return tokens.length;
+    }
+
+    function truncate(str, length = 80) {
+      if (!str) return '';
+      const clean = str.replace(/\s+/g, ' ').trim();
+      return clean.length > length ? `${clean.slice(0, length - 1)}…` : clean;
+    }
+
+    function renderStats() {
+      const statsGrid = document.getElementById('statsGrid');
+      const { insertions, deletions, replacements, totalChanges, wordsA, wordsB, charsA, charsB } = state.summary;
+
+      const fileAName = state.fileA ? state.fileA.name : 'Document A';
+      const fileBName = state.fileB ? state.fileB.name : 'Document B';
+
+      statsGrid.innerHTML = `
+        <div class="stat-card" aria-label="Original document metrics">
+          <h3>${escapeHTML(fileAName)}</h3>
+          <div class="meta">Original</div>
+          <div class="metric"><span>Words</span><strong>${wordsA.toLocaleString()}</strong></div>
+          <div class="metric"><span>Characters</span><strong>${charsA.toLocaleString()}</strong></div>
+        </div>
+        <div class="stat-card" aria-label="Revised document metrics">
+          <h3>${escapeHTML(fileBName)}</h3>
+          <div class="meta">Revised</div>
+          <div class="metric"><span>Words</span><strong>${wordsB.toLocaleString()}</strong></div>
+          <div class="metric"><span>Characters</span><strong>${charsB.toLocaleString()}</strong></div>
+        </div>
+        <div class="stat-card" aria-label="Change summary">
+          <h3>Change summary</h3>
+          <div class="metric"><span>Total change segments</span><strong>${totalChanges}</strong></div>
+          <div class="metric"><span>Replacements</span><strong>${replacements}</strong></div>
+          <div class="metric"><span>Additions (segments)</span><strong>${insertions.segments}</strong></div>
+          <div class="metric"><span>Deletions (segments)</span><strong>${deletions.segments}</strong></div>
+        </div>
+        <div class="stat-card" aria-label="Word deltas">
+          <h3>Word deltas</h3>
+          <div class="metric"><span>Words added</span><strong>+${insertions.words}</strong></div>
+          <div class="metric"><span>Words removed</span><strong>-${deletions.words}</strong></div>
+          <div class="metric"><span>Characters added</span><strong>+${insertions.chars}</strong></div>
+          <div class="metric"><span>Characters removed</span><strong>-${deletions.chars}</strong></div>
+        </div>
+      `;
+    }
+
+    function renderDiff() {
+      const container = document.getElementById('diffOutput');
+      const diffs = state.diffs;
+
+      const hasChanges = diffs.some(diff => diff[0] !== 0);
+      if (!hasChanges) {
+        container.innerHTML = '<p class="no-diff">No differences detected with the current settings.</p>';
+        return;
+      }
+
+      const fragments = diffs.map(([op, text]) => {
+        const safe = escapeHTML(text).replace(/\n/g, '<br>');
+        if (op === 1) {
+          return `<span class="segment diff-add">${safe}</span>`;
+        }
+        if (op === -1) {
+          return `<span class="segment diff-del">${safe}</span>`;
+        }
+        return `<span class="segment diff-eq">${safe}</span>`;
+      });
+
+      container.innerHTML = fragments.join('');
+    }
+
+    function renderDocuments() {
+      document.getElementById('docAText').textContent = state.textA || '(empty document)';
+      document.getElementById('docBText').textContent = state.textB || '(empty document)';
+
+      if (state.fileA) {
+        document.getElementById('sourceATitle').textContent = `Original: ${state.fileA.name}`;
+      }
+      if (state.fileB) {
+        document.getElementById('sourceBTitle').textContent = `Revised: ${state.fileB.name}`;
+      }
+    }
+
+    function toggleLoading(isLoading) {
+      const backdrop = document.getElementById('loadingBackdrop');
+      if (isLoading) {
+        backdrop.removeAttribute('hidden');
+      } else {
+        backdrop.setAttribute('hidden', '');
+      }
+    }
+
+    function showStatus(message, type = 'info') {
+      const toast = document.getElementById('statusToast');
+      toast.textContent = message;
+      toast.className = `toast ${type}`;
+      toast.classList.add('show');
+
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 4200);
+    }
+
+    function handleDownload() {
+      if (!state.summaryRows.length) {
+        showStatus('No changes to export.', 'warning');
+        return;
+      }
+      if (!window.XLSX) {
+        showStatus('SheetJS failed to load.', 'error');
+        return;
+      }
+
+      const header = ['Change type', 'Content', 'Word count', 'Character count', 'Context before', 'Context after'];
+      const rows = state.summaryRows.map(row => [
+        row.type,
+        row.content,
+        row.words,
+        row.chars,
+        row.before,
+        row.after,
+      ]);
+
+      const data = [header, ...rows.length ? rows : [['No differences detected', '', '', '', '', '']]];
+
+      const worksheet = XLSX.utils.aoa_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Diff summary');
+
+      const baseA = sanitizeFilename(state.fileA ? state.fileA.name : 'original');
+      const baseB = sanitizeFilename(state.fileB ? state.fileB.name : 'revised');
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+
+      const filename = `diff-summary-${baseA}-vs-${baseB}-${timestamp}.xlsx`;
+      XLSX.writeFile(workbook, filename);
+
+      showStatus('Excel summary downloaded.', 'success');
+    }
+
+    function sanitizeFilename(name) {
+      return name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9-_]+/g, '_').toLowerCase();
+    }
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>"']/g, (char) => {
+        const map = {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;',
+        };
+        return map[char];
+      });
+    }
+  </script>
+</body>
+</html>
